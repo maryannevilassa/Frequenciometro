@@ -1,0 +1,594 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Check, X, TimerReset, Award, RefreshCw, Plus, Upload, Download, BarChart3, Settings2, BookOpenText, ChevronRight } from "lucide-react";
+
+// ===== Utilidades sem TypeScript =====
+const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+function useLocalStorage(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }, [key, value]);
+  return [value, setValue];
+}
+
+// ===== Banco inicial de itens (exemplos) =====
+const SEED_ITENS = [
+  {
+    id: "lp-1",
+    area: "Língua Portuguesa",
+    habilidade: "Localizar informação explícita em texto curto",
+    enunciado:
+      "Leia o bilhete: 'Senhores responsáveis, as avaliações de Matemática ocorrerão na quarta-feira.' Qual informação está explícita no texto?",
+    alternativas: [
+      { id: "a", texto: "As avaliações serão hoje." },
+      { id: "b", texto: "As avaliações serão na quarta-feira.", correta: true },
+      { id: "c", texto: "As avaliações foram canceladas." },
+      { id: "d", texto: "As avaliações ocorrerão no sábado." },
+    ],
+    explicacao:
+      "O enunciado afirma diretamente 'ocorrerão na quarta-feira', portanto é uma informação explícita.",
+    dificuldade: 1,
+  },
+  {
+    id: "lp-2",
+    area: "Língua Portuguesa",
+    habilidade: "Inferir sentido de palavra/expressão pelo contexto",
+    enunciado:
+      "No trecho 'A escola AGIU prontamente', o sentido mais provável de 'agiu' é:",
+    alternativas: [
+      { id: "a", texto: "ficou esperando" },
+      { id: "b", texto: "tomou providências", correta: true },
+      { id: "c", texto: "criticou os alunos" },
+      { id: "d", texto: "realizou uma festa" },
+    ],
+    explicacao:
+      "'Agir' no contexto escolar costuma remeter a tomar providências diante de uma situação.",
+    dificuldade: 1,
+  },
+  {
+    id: "mat-1",
+    area: "Matemática",
+    habilidade: "Razão e proporção / porcentagem",
+    enunciado:
+      "Em uma turma com 40 estudantes, 25% faltaram. Quantos faltaram?",
+    alternativas: [
+      { id: "a", texto: "5" },
+      { id: "b", texto: "10", correta: true },
+      { id: "c", texto: "15" },
+      { id: "d", texto: "20" },
+    ],
+    explicacao: "25% de 40 = 0,25 × 40 = 10.",
+    dificuldade: 1,
+  },
+  {
+    id: "mat-2",
+    area: "Matemática",
+    habilidade: "Tratamento da informação / leitura de gráfico",
+    enunciado:
+      "Um gráfico de barras mostra as presenças semanais: seg=30, ter=35, qua=40, qui=38, sex=37. Em qual dia houve maior presença?",
+    alternativas: [
+      { id: "a", texto: "Segunda-feira" },
+      { id: "b", texto: "Terça-feira" },
+      { id: "c", texto: "Quarta-feira", correta: true },
+      { id: "d", texto: "Quinta-feira" },
+    ],
+    explicacao: "O maior valor do conjunto apresentado é 40, referente à quarta-feira.",
+    dificuldade: 1,
+  },
+  {
+    id: "lp-3",
+    area: "Língua Portuguesa",
+    habilidade: "Reconhecer efeito de sentido de pontuação",
+    enunciado:
+      "No aviso 'Atenção! Provas amanhã.', o ponto de exclamação indica principalmente:",
+    alternativas: [
+      { id: "a", texto: "dúvida" },
+      { id: "b", texto: "ordem" },
+      { id: "c", texto: "ênfase/alerta", correta: true },
+      { id: "d", texto: "ironia" },
+    ],
+    dificuldade: 2,
+  },
+  {
+    id: "mat-3",
+    area: "Matemática",
+    habilidade: "Operações com números naturais",
+    enunciado: "Se faltam 18 dias para o SAEB e passam 7 dias, quantos restam?",
+    alternativas: [
+      { id: "a", texto: "9" },
+      { id: "b", texto: "10" },
+      { id: "c", texto: "11", correta: true },
+      { id: "d", texto: "12" },
+    ],
+    dificuldade: 1,
+  },
+];
+
+export default function SAEBGame() {
+  const [itens, setItens] = useLocalStorage("saeb_itens", SEED_ITENS);
+  const [areaFiltro, setAreaFiltro] = useState("Todas"); // "Língua Portuguesa" | "Matemática" | "Todas"
+  const [dificuldade, setDificuldade] = useState(0); // 0 todas; 1 fácil; 2 médio; 3 difícil
+  const [rodando, setRodando] = useState(false);
+  const [indice, setIndice] = useState(0);
+  const [ordem, setOrdem] = useState([]);
+  const [resposta, setResposta] = useState(null);
+  const [acertos, setAcertos] = useState(0);
+  const [erros, setErros] = useState(0);
+  const [pontos, setPontos] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [streakMax, setStreakMax] = useState(0);
+  const [tempoQuestao, setTempoQuestao] = useState(0);
+  const [tempos, setTempos] = useState([]);
+  const [tempoRestante, setTempoRestante] = useState(30);
+  const tickRef = useRef(null);
+  const startedRef = useRef(0);
+  const [nomeJogador, setNomeJogador] = useLocalStorage("saeb_nome", "Estudante");
+  const [turma, setTurma] = useLocalStorage("saeb_turma", "");
+  const [leader, setLeader] = useLocalStorage("saeb_leader", []);
+  const [admin, setAdmin] = useLocalStorage("saeb_admin", false);
+  const [importPreview, setImportPreview] = useState("");
+
+  const pool = useMemo(() => {
+    return itens.filter((it) => (areaFiltro === "Todas" ? true : it.area === areaFiltro) && (dificuldade === 0 ? true : it.dificuldade === dificuldade));
+  }, [itens, areaFiltro, dificuldade]);
+
+  const itemAtual = useMemo(() => {
+    const id = ordem[indice];
+    return pool.find((it) => it.id === id) || pool[0];
+  }, [ordem, indice, pool]);
+
+  function iniciar() {
+    const ids = shuffle(pool).map((i) => i.id);
+    setOrdem(ids);
+    setIndice(0);
+    setAcertos(0);
+    setErros(0);
+    setPontos(0);
+    setStreak(0);
+    setStreakMax(0);
+    setTempos([]);
+    setTempoQuestao(0);
+    setTempoRestante(30);
+    setRodando(true);
+    startedRef.current = performance.now();
+    if (tickRef.current) cancelAnimationFrame(tickRef.current);
+    tickRef.current = requestAnimationFrame(ticker);
+  }
+
+  function ticker(ts) {
+    const elapsed = (ts - startedRef.current) / 1000;
+    setTempoQuestao(elapsed);
+    setTempoRestante((r) => clamp(30 - elapsed, 0, 30));
+    tickRef.current = requestAnimationFrame(ticker);
+  }
+
+  function responder(idAlt) {
+    if (!rodando || !itemAtual) return;
+    setResposta(idAlt);
+    const correta = (itemAtual.alternativas.find((a) => a.correta) || {}).id === idAlt;
+    const tempo = tempoQuestao;
+    setTempos((t) => [...t, tempo]);
+
+    if (correta) {
+      const bonusTempo = Math.max(0, 10 - Math.floor(tempo));
+      const pontosGanhos = 100 + streak * 10 + bonusTempo;
+      setPontos((p) => p + pontosGanhos);
+      setAcertos((n) => n + 1);
+      setStreak((s) => {
+        const novo = s + 1;
+        setStreakMax((m) => Math.max(m, novo));
+        return novo;
+      });
+    } else {
+      setErros((n) => n + 1);
+      setStreak(0);
+    }
+  }
+
+  function proxima() {
+    setResposta(null);
+    setTempoQuestao(0);
+    startedRef.current = performance.now();
+    setTempoRestante(30);
+    if (indice + 1 < ordem.length) {
+      setIndice(indice + 1);
+    } else {
+      finalizar();
+    }
+  }
+
+  function finalizar() {
+    setRodando(false);
+    if (tickRef.current) cancelAnimationFrame(tickRef.current);
+    const tempoMedio = tempos.length ? tempos.reduce((a, b) => a + b, 0) / tempos.length : 0; // não usado, mas calculado
+    const linha = {
+      nome: nomeJogador || "Estudante",
+      turma: turma || undefined,
+      pontos,
+      acertos,
+      dataISO: new Date().toISOString(),
+    };
+    setLeader((L) => [...L, linha].sort((a, b) => b.pontos - a.pontos).slice(0, 100));
+  }
+
+  function addItem(v) {
+    setItens((arr) => {
+      const exists = arr.some((x) => x.id === v.id);
+      const novo = exists ? arr.map((x) => (x.id === v.id ? v : x)) : [...arr, v];
+      return novo;
+    });
+  }
+
+  function exportarItens() {
+    const blob = new Blob([JSON.stringify(itens, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "itens-saeb.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importarItens(json) {
+    try {
+      const arr = JSON.parse(json);
+      if (!Array.isArray(arr)) throw new Error("JSON inválido");
+      const ok = arr.every((it) => it.id && it.enunciado && it.alternativas && it.alternativas.length >= 2);
+      if (!ok) throw new Error("Estrutura de itens incorreta");
+      setItens(arr);
+      alert("Itens importados com sucesso!");
+    } catch (e) {
+      alert("Erro ao importar: " + (e && e.message ? e.message : e));
+    }
+  }
+
+  const Tag = ({ children }) => (
+    <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 border">{children}</span>
+  );
+
+  const Card = ({ children, className = "" }) => (
+    <div className={`rounded-2xl shadow-sm border p-4 bg-white ${className}`}>{children}</div>
+  );
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-b from-sky-50 to-white text-gray-900">
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <header className="flex items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+              <BookOpenText className="w-7 h-7" /> Jogo SAEB – Prática & Revisão
+            </h1>
+            <p className="text-sm text-gray-600">Quiz gamificado por áreas, com pontuação, streak, tempo e ranking. Ideal para revisão pré-SAEB.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              className={`px-3 py-2 rounded-xl border hover:shadow-sm ${admin ? "bg-gray-900 text-white" : "bg-white"}`}
+              onClick={() => setAdmin((a) => !a)}
+              title="Alternar modo administrador"
+            >
+              <Settings2 className="w-4 h-4 inline -mt-0.5" /> <span className="text-sm">Admin</span>
+            </button>
+          </div>
+        </header>
+
+        <Card>
+          <div className="grid md:grid-cols-4 gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">Nome do(a) estudante</span>
+              <input
+                className="border rounded-xl px-3 py-2"
+                value={nomeJogador}
+                onChange={(e) => setNomeJogador(e.target.value)}
+                placeholder="Ex.: Maria, João, Equipe 1"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">Turma (opcional)</span>
+              <input className="border rounded-xl px-3 py-2" value={turma} onChange={(e) => setTurma(e.target.value)} placeholder="Ex.: 3ºA" />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">Área</span>
+              <select className="border rounded-xl px-3 py-2" value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)}>
+                <option>Todas</option>
+                <option>Língua Portuguesa</option>
+                <option>Matemática</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">Dificuldade</span>
+              <select className="border rounded-xl px-3 py-2" value={dificuldade} onChange={(e) => setDificuldade(Number(e.target.value))}>
+                <option value={0}>Todas</option>
+                <option value={1}>Fácil</option>
+                <option value={2}>Médio</option>
+                <option value={3}>Difícil</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2 items-center">
+            <button onClick={iniciar} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:brightness-110 flex items-center gap-2">
+              <TimerReset className="w-4 h-4" /> Iniciar rodada
+            </button>
+            <button onClick={() => { setAreaFiltro("Todas"); setDificuldade(0); }} className="px-4 py-2 rounded-xl border bg-white hover:shadow-sm flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" /> Reset filtros
+            </button>
+            <div className="text-xs text-gray-600">Itens disponíveis: <b>{pool.length}</b></div>
+          </div>
+        </Card>
+
+        <div className="mt-6 grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Card>
+              {!rodando || !itemAtual ? (
+                <div className="text-center py-10">
+                  <p className="text-gray-600">Escolha área/dificuldade e clique em <b>Iniciar rodada</b>.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Tag>{itemAtual.area}</Tag>
+                      <Tag>Habilidade: {itemAtual.habilidade}</Tag>
+                      <Tag>Dificuldade: {"★".repeat(itemAtual.dificuldade)}</Tag>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Tag><TimerReset className="w-3 h-3 inline" /> {tempoRestante.toFixed(1)}s</Tag>
+                      <Tag>Questão {indice + 1} / {ordem.length}</Tag>
+                    </div>
+                  </div>
+
+                  <div className="text-lg md:text-xl font-medium leading-relaxed">{itemAtual.enunciado}</div>
+
+                  <div className="grid gap-2">
+                    {itemAtual.alternativas.map((alt, i) => {
+                      const escolhida = resposta === alt.id;
+                      const correta = !!alt.correta;
+                      const estado = resposta ? (correta ? "correta" : escolhida ? "errada" : "neutra") : "neutra";
+                      return (
+                        <button
+                          key={alt.id}
+                          disabled={!!resposta}
+                          onClick={() => responder(alt.id)}
+                          className={`text-left px-4 py-3 rounded-xl border transition ${
+                            estado === "correta" ? "bg-green-50 border-green-300" :
+                            estado === "errada" ? "bg-red-50 border-red-300" :
+                            "hover:shadow-sm bg-white"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 shrink-0 w-6 h-6 rounded-full border flex items-center justify-center text-xs">{String.fromCharCode(65 + i)}</div>
+                            <div>{alt.texto}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <AnimatePresence>
+                    {resposta && (
+                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-sm">
+                            {(itemAtual.alternativas.find((a) => a.correta) || {}).id === resposta ? (
+                              <span className="inline-flex items-center gap-1 text-green-700"><Check className="w-4 h-4"/> Correto! + pontos</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-red-700"><X className="w-4 h-4"/> Resposta incorreta</span>
+                            )}
+                            {itemAtual.explicacao && <span className="text-gray-600">• {itemAtual.explicacao}</span>}
+                          </div>
+                          <button onClick={proxima} className="px-3 py-2 rounded-xl bg-gray-900 text-white text-sm flex items-center gap-1">
+                            Próxima <ChevronRight className="w-4 h-4"/>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <div className="lg:col-span-1">
+            <Card>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">Pontuação</div>
+                <Award className="w-5 h-5"/>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-xl bg-gray-50">
+                  <div className="text-xs text-gray-500">Pontos</div>
+                  <div className="text-2xl font-bold">{pontos}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-gray-50">
+                  <div className="text-xs text-gray-500">Streak</div>
+                  <div className="text-2xl font-bold">{streak} <span className="text-xs text-gray-500">(máx. {streakMax})</span></div>
+                </div>
+                <div className="p-3 rounded-xl bg-gray-50">
+                  <div className="text-xs text-gray-500">Acertos</div>
+                  <div className="text-2xl font-bold text-green-700">{acertos}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-gray-50">
+                  <div className="text-xs text-gray-500">Erros</div>
+                  <div className="text-2xl font-bold text-red-700">{erros}</div>
+                </div>
+              </div>
+              {rodando && (
+                <div className="mt-3 text-xs text-gray-600">Tempo por questão: {tempoQuestao.toFixed(1)}s</div>
+              )}
+              {!rodando && (acertos + erros) > 0 && (
+                <div className="mt-3 text-sm text-gray-700">
+                  <p><b>Rodada concluída!</b> Seu resultado foi salvo no ranking abaixo.</p>
+                </div>
+              )}
+            </Card>
+
+            <Card className="mt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2"><BarChart3 className="w-5 h-5"/> <b>Top 10 da escola</b></div>
+                <button onClick={() => setLeader([])} className="text-xs underline">Limpar</button>
+              </div>
+              <ol className="mt-3 space-y-2">
+                {leader.slice(0,10).map((row, idx) => (
+                  <li key={row.nome+idx} className={`flex items-center justify-between rounded-xl border px-3 py-2 ${idx<3?"bg-amber-50":"bg-white"}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full border flex items-center justify-center text-xs">{idx+1}</span>
+                      <div>
+                        <div className="font-medium">{row.nome} {row.turma? <span className="text-xs text-gray-500">• {row.turma}</span>: null}</div>
+                        <div className="text-xs text-gray-500">Acertos: {row.acertos} • {new Date(row.dataISO).toLocaleString()}</div>
+                      </div>
+                    </div>
+                    <div className="text-sm font-bold">{row.pontos} pts</div>
+                  </li>
+                ))}
+                {leader.length===0 && <div className="text-sm text-gray-500">Sem resultados ainda. Jogue uma rodada!</div>}
+              </ol>
+            </Card>
+          </div>
+        </div>
+
+        {admin && (
+          <Card className="mt-6">
+            <div className="flex items-center justify-between">
+              <b className="flex items-center gap-2"><Settings2 className="w-5 h-5"/> Área do(a) Professor(a)</b>
+              <div className="flex gap-2">
+                <button onClick={exportarItens} className="px-3 py-2 rounded-xl border bg-white flex items-center gap-1 text-sm"><Download className="w-4 h-4"/>Exportar itens</button>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4 mt-4">
+              <ItemForm onSave={addItem} />
+
+              <div>
+                <div className="text-sm text-gray-700 mb-2">Importar itens (.json)</div>
+                <textarea value={importPreview} onChange={(e)=>setImportPreview(e.target.value)} className="w-full h-40 border rounded-xl p-2" placeholder='Cole aqui o JSON exportado ou no formato de Item[]' />
+                <button onClick={()=>importarItens(importPreview)} className="mt-2 px-3 py-2 rounded-xl border bg-white flex items-center gap-1 text-sm"><Upload className="w-4 h-4"/>Importar</button>
+                <p className="mt-2 text-xs text-gray-500">Dica: você pode preparar bancos por série/turma (ex.: 9º ano) e importar quando for aplicar.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 text-xs text-gray-600 leading-relaxed">
+              <p><b>Observação pedagógica:</b> Cada item pode registrar a <i>habilidade</i> avaliada, aproximando-se dos descritores utilizados em avaliações em larga escala. Use a <b>dificuldade</b> para criar trilhas adaptativas.</p>
+            </div>
+          </Card>
+        )}
+
+        <footer className="mt-10 text-center text-xs text-gray-500">
+          Feito com ♥ para revisão do SAEB. Salva dados somente no navegador (localStorage).
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function ItemForm({ onSave }) {
+  const [id, setId] = useState("");
+  const [area, setArea] = useState("Língua Portuguesa");
+  const [habilidade, setHabilidade] = useState("");
+  const [enunciado, setEnunciado] = useState("");
+  const [dificuldade, setDificuldade] = useState(1);
+  const [alternativas, setAlternativas] = useState([
+    { id: "a", texto: "", correta: true },
+    { id: "b", texto: "" },
+    { id: "c", texto: "" },
+    { id: "d", texto: "" },
+  ]);
+  const [explicacao, setExplicacao] = useState("");
+
+  function salvar() {
+    if (!id || !enunciado || alternativas.some((a) => !a.texto)) {
+      alert("Preencha ID, enunciado e todas as alternativas.");
+      return;
+    }
+    if (!alternativas.some((a) => a.correta)) {
+      alert("Marque uma alternativa como correta.");
+      return;
+    }
+    onSave({ id, area, habilidade, enunciado, alternativas, dificuldade, explicacao });
+    setId("");
+    setHabilidade("");
+    setEnunciado("");
+    setExplicacao("");
+    setAlternativas([
+      { id: "a", texto: "", correta: true },
+      { id: "b", texto: "" },
+      { id: "c", texto: "" },
+      { id: "d", texto: "" },
+    ]);
+  }
+
+  function setCorreta(idx) {
+    setAlternativas((alts) => alts.map((a, i) => ({ ...a, correta: i === idx })));
+  }
+
+  return (
+    <div>
+      <div className="text-sm text-gray-700 mb-2">Cadastrar/editar item</div>
+      <div className="grid gap-2">
+        <div className="grid md:grid-cols-2 gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">ID único (ex.: lp-101)</span>
+            <input className="border rounded-xl px-3 py-2" value={id} onChange={(e)=>setId(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Área</span>
+            <select className="border rounded-xl px-3 py-2" value={area} onChange={(e)=>setArea(e.target.value)}>
+              <option>Língua Portuguesa</option>
+              <option>Matemática</option>
+            </select>
+          </label>
+        </div>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-gray-500">Habilidade/Descritor</span>
+          <input className="border rounded-xl px-3 py-2" value={habilidade} onChange={(e)=>setHabilidade(e.target.value)} placeholder="Ex.: Inferir sentido, porcentagem, leitura de gráfico" />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-gray-500">Enunciado</span>
+          <textarea className="border rounded-xl px-3 py-2 h-28" value={enunciado} onChange={(e)=>setEnunciado(e.target.value)} />
+        </label>
+        <div className="grid md:grid-cols-2 gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Dificuldade</span>
+            <select className="border rounded-xl px-3 py-2" value={dificuldade} onChange={(e)=>setDificuldade(Number(e.target.value))}>
+              <option value={1}>Fácil</option>
+              <option value={2}>Médio</option>
+              <option value={3}>Difícil</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Explicação (feedback)</span>
+            <input className="border rounded-xl px-3 py-2" value={explicacao} onChange={(e)=>setExplicacao(e.target.value)} placeholder="Feedback apresentado após a resposta" />
+          </label>
+        </div>
+
+        <div className="mt-2">
+          <div className="text-sm font-medium">Alternativas</div>
+          <div className="grid gap-2 mt-1">
+            {alternativas.map((alt, idx) => (
+              <div key={alt.id} className="flex items-center gap-2">
+                <input type="radio" name="correta" checked={!!alt.correta} onChange={()=>setCorreta(idx)} />
+                <span className="w-6 h-6 rounded-full border flex items-center justify-center text-xs">{String.fromCharCode(65+idx)}</span>
+                <input className="flex-1 border rounded-xl px-3 py-2" value={alt.texto} onChange={(e)=>setAlternativas((a)=>a.map((x,i)=> i===idx?{...x,texto:e.target.value}:x))} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-2">
+          <button onClick={salvar} className="px-3 py-2 rounded-xl bg-blue-600 text-white flex items-center gap-1 text-sm"><Plus className="w-4 h-4"/>Salvar item</button>
+        </div>
+      </div>
+    </div>
+  );
+}

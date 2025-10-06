@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Frequência - Escola Estadual Abelardo Duarte Passos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 60px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 40px;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="2" fill="rgba(255,255,255,0.1)"/></svg>') repeat;
+            animation: float 20s infinite linear;
+        }
+
+        @keyframes float {
+            0% { transform: translateX(0) translateY(0); }
+            100% { transform: translateX(-50px) translateY(-50px); }
+        }
+
+        .school-name {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 3px solid rgba(255,255,255,0.3);
+            padding-bottom: 15px;
+            display: inline-block;
+        }
+
+        .system-title {
+            font-size: 3.5rem;
+            margin-bottom: 15px;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .system-subtitle {
+            font-size: 1.6rem;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+            margin-bottom: 30px;
+        }
+
+        .year-info {
+            background: rgba(255,255,255,0.25);
+            padding: 15px 30px;
+            border-radius: 25px;
+            display: inline-block;
+            font-size: 1.3rem;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Navigation Months */
+        .months-section {
+            background: white;
+            border-radius: 25px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .months-title {
+            text-align: center;
+            font-size: 2.8rem;
+            margin-bottom: 15px;
+            color: #333;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .months-subtitle {
+            text-align: center;
+            font-size: 1.4rem;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .months-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .month-card {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 3px solid transparent;
+        }
+
+        .month-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent, rgba(79, 172, 254, 0.05), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+
+        .month-card:hover::before {
+            transform: translateX(100%);
+        }
+
+        .month-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 25px 50px rgba(79, 172, 254, 0.2);
+            border-color: #4facfe;
+        }
+
+        .month-card.available {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border-color: #28a745;
+        }
+
+        .month-card.available:hover {
+            transform: translateY(-12px) scale(1.02);
+            box-shadow: 0 30px 60px rgba(40, 167, 69, 0.3);
+        }
+
+        .month-card.coming-soon {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            cursor: not-allowed;
+        }
+
+        .month-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+            position: relative;
+            z-index: 1;
+        }
+
+        .month-name {
+            font-size: 2.2rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .month-status {
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .month-button {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.3);
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 1;
+            backdrop-filter: blur(10px);
+        }
+
+        .month-button:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.5);
+            transform: scale(1.05);
+        }
+
+        .month-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* Importance Section */
+        .importance-section {
+            background: white;
+            border-radius: 25px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .importance-title {
+            text-align: center;
+            font-size: 2.8rem;
+            margin-bottom: 15px;
+            color: #333;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .importance-intro {
+            text-align: center;
+            font-size: 1.4rem;
+            color: #666;
+            margin-bottom: 40px;
+        }
+
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .benefit-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 20px;
+            padding: 35px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border-left: 5px solid #4facfe;
+        }
+
+        .benefit-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(79, 172, 254, 0.15);
+        }
+
+        .benefit-icon {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
+            color: #4facfe;
+        }
+
+        .benefit-title {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .benefit-description {
+            font-size: 1.1rem;
+            color: #666;
+            line-height: 1.7;
+        }
+
+        /* Objectives Section */
+        .objectives-section {
+            background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+            color: white;
+            border-radius: 25px;
+            padding: 50px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(111, 66, 193, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .objectives-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+            animation: sparkle-slow 25s infinite linear;
+        }
+
+        @keyframes sparkle-slow {
+            0% { transform: rotate(0deg) scale(1); }
+            100% { transform: rotate(360deg) scale(1.05); }
+        }
+
+        .objectives-title {
+            text-align: center;
+            font-size: 2.8rem;
+            margin-bottom: 15px;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .objectives-intro {
+            text-align: center;
+            font-size: 1.4rem;
+            margin-bottom: 40px;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+        }
+
+        .objectives-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .objective-item {
+            background: rgba(255,255,255,0.15);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .objective-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-3px);
+        }
+
+        .objective-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .objective-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .objective-description {
+            font-size: 1rem;
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            text-align: center;
+            padding: 40px;
+            border-radius: 25px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .footer-title {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .footer-text {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .school-name { font-size: 1.6rem; }
+            .system-title { font-size: 2.5rem; }
+            .months-title, .importance-title, .objectives-title { font-size: 2.2rem; }
+            .months-grid, .benefits-grid, .objectives-list { grid-template-columns: 1fr; }
+            .header, .months-section, .importance-section, .objectives-section { padding: 30px 20px; }
+            .month-card, .benefit-card { padding: 25px; }
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .month-card.available .month-icon {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="school-name">
+                🏫 Escola Estadual Abelardo Duarte Passos
+            </div>
+            <h1 class="system-title">🏆 Sistema de Frequência Escolar</h1>
+            <p class="system-subtitle">Acompanhamento e Gamificação da Frequência - 3º Ano EM</p>
+            <div class="year-info">
+                📅 Ano Letivo 2025 • 📊 Acompanhamento Mensal
+            </div>
+        </div>
+
+        <!-- Months Navigation -->
+        <div class="months-section">
+            <h2 class="months-title">📅 Acompanhamento Mensal</h2>
+            <p class="months-subtitle">Selecione o mês para visualizar os resultados de frequência</p>
+            
+            <div class="months-grid">
+                <div class="month-card available">
+                    <div class="month-icon">🎯</div>
+                    <h3 class="month-name">Setembro</h3>
+                    <p class="month-status">✅ Disponível - 26 dias letivos</p>
+                    <a href="#" class="month-button" onclick="alert('Link para o painel de setembro será inserido aqui!');">
+                        Ver Resultados
+                    </a>
+                </div>
+
+                <div class="month-card coming-soon">
+                    <div class="month-icon">🚀</div>
+                    <h3 class="month-name">Outubro</h3>
+                    <p class="month-status">🔄 Em Preparação</p>
+                    <span class="month-button disabled">
+                        Em Breve
+                    </span>
+                </div>
+
+                <div class="month-card coming-soon">
+                    <div class="month-icon">🎄</div>
+                    <h3 class="month-name">Novembro</h3>
+                    <p class="month-status">⏳ Aguardando</p>
+                    <span class="month-button disabled">
+                        Em Breve
+                    </span>
+                </div>
+
+                <div class="month-card coming-soon">
+                    <div class="month-icon">🎊</div>
+                    <h3 class="month-name">Dezembro</h3>
+                    <p class="month-status">⏳ Aguardando</p>
+                    <span class="month-button disabled">
+                        Em Breve
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Importance Section -->
+        <div class="importance-section">
+            <h2 class="importance-title">🤔 Por que é importante manter a frequência na escola?</h2>
+            <p class="importance-intro">A frequência escolar é fundamental para o sucesso acadêmico e desenvolvimento pessoal dos estudantes</p>
+            
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <div class="benefit-icon">📚</div>
+                    <h3 class="benefit-title">Aprendizado Contínuo</h3>
+                    <p class="benefit-description">
+                        Cada dia de aula é uma oportunidade única de aprender algo novo. O conhecimento é construído de forma progressiva, e as faltas criam lacunas difíceis de preencher.
+                    </p>
+                </div>
+
+                <div class="benefit-card">
+                    <div class="benefit-icon">🎯</div>
+                    <h3 class="benefit-title">Melhores Notas</h3>
+                    <p class="benefit-description">
+                        Estudantes com frequência regular apresentam desempenho acadêmico superior. A participação ativa nas aulas é essencial para compreender os conteúdos.
+                    </p>
+                </div>
+
+                <div class="benefit-card">
+                    <div class="benefit-icon">👥</div>
+                    <h3 class="benefit-title">Socialização</h3>
+                    <p class="benefit-description">
+                        A escola é um ambiente de convivência social importante. A frequência regular fortalece amizades e desenvolve habilidades sociais fundamentais.
+                    </p>
+                </div>
+
+                <div class="benefit-card">
+                    <div class="benefit-icon">⏰</div>
+                    <h3 class="benefit-title">Disciplina e Responsabilidade</h3>
+                    <p class="benefit-description">
+                        Manter uma rotina escolar desenvolve senso de responsabilidade, pontualidade e disciplina - qualidades essenciais para a vida profissional.
+                    </p>
+                </div>
+
+                <div class="benefit-card">
+                    <div class="benefit-icon">🚀</div>
+                    <h3 class="benefit-title">Preparação para o Futuro</h3>
+                    <p class="benefit-description">
+                        Uma boa frequência escolar prepara os estudantes para o mercado de trabalho e para o ensino superior, onde a assiduidade é ainda mais valorizada.
+                    </p>
+                </div>
+
+                <div class="benefit-card">
+                    <div class="benefit-icon">⚖️</div>
+                    <h3 class="benefit-title">Requisito Legal</h3>
+                    <p class="benefit-description">
+                        A frequência mínima de 75% é obrigatória por lei. Manter uma frequência alta garante a aprovação e evita problemas legais.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Objectives Section -->
+        <div class="objectives-section">
+            <h2 class="objectives-title">🎯 Objetivos da Nossa Competição</h2>
+            <p class="objectives-intro">
+                Nossa competição de frequência tem como foco motivar, reconhecer e incentivar a assiduidade escolar através de gamificação
+            </p>
+            
+            <div class="objectives-list">
+                <div class="objective-item">
+                    <div class="objective-icon">🏆</div>
+                    <h3 class="objective-title">Reconhecer os Destaques</h3>
+                    <p class="objective-description">
+                        Valorizar e celebrar publicamente os alunos que mantêm excelente frequência, servindo como exemplo e inspiração para outros estudantes.
+                    </p>
+                </div>
+
+                <div class="objective-item">
+                    <div class="objective-icon">💪</div>
+                    <h3 class="objective-title">Motivar a Melhoria</h3>
+                    <p class="objective-description">
+                        Incentivar alunos com frequência moderada a se esforçarem mais, mostrando que estão "quase lá" e podem alcançar a excelência.
+                    </p>
+                </div>
+
+                <div class="objective-item">
+                    <div class="objective-icon">📈</div>
+                    <h3 class="objective-title">Aumentar a Frequência Geral</h3>
+                    <p class="objective-description">
+                        Elevar os índices de frequência de toda a escola através de uma competição saudável e motivacional entre as turmas.
+                    </p>
+                </div>
+
+                <div class="objective-item">
+                    <div class="objective-icon">🎮</div>
+                    <h3 class="objective-title">Tornar o Aprendizado Divertido</h3>
+                    <p class="objective-description">
+                        Usar elementos de gamificação para tornar o acompanhamento da frequência mais atrativo e engajante para os estudantes.
+                    </p>
+                </div>
+
+                <div class="objective-item">
+                    <div class="objective-icon">👨‍🏫</div>
+                    <h3 class="objective-title">Facilitar o Acompanhamento</h3>
+                    <p class="objective-description">
+                        Proporcionar aos professores e gestores uma ferramenta visual e eficiente para monitorar a frequência e identificar alunos em risco.
+                    </p>
+                </div>
+
+                <div class="objective-item">
+                    <div class="objective-icon">🏫</div>
+                    <h3 class="objective-title">Fortalecer a Cultura Escolar</h3>
+                    <p class="objective-description">
+                        Criar uma cultura de valorização da presença escolar, onde estar na escola é visto como prioridade e motivo de orgulho.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <h3 class="footer-title">🌟 Juntos por uma Educação de Qualidade</h3>
+            <p class="footer-text">
+                Este sistema foi desenvolvido para apoiar o sucesso acadêmico de nossos alunos através do acompanhamento transparente e motivacional da frequência escolar. 
+                Cada presença conta para construir um futuro brilhante! 📚✨
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Adicionar interatividade aos cards
+        document.addEventListener('DOMContentLoaded', function() {
+            const monthCards = document.querySelectorAll('.month-card');
+            
+            monthCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    if (!this.classList.contains('coming-soon')) {
+                        this.style.transform = 'translateY(-12px) scale(1.02)';
+                    }
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    if (!this.classList.contains('coming-soon')) {
+                        this.style.transform = 'translateY(0) scale(1)';
+                    }
+                });
+            });
+            
+            // Efeito de rolagem suave para as seções
+            const sections = document.querySelectorAll('.months-section, .importance-section, .objectives-section');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, { threshold: 0.1 });
+            
+            sections.forEach(section => {
+                section.style.opacity = '0';
+                section.style.transform = 'translateY(20px)';
+                section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                observer.observe(section);
+            });
+        });
+
+        console.log('🏆 Sistema de Frequência Escolar - Escola Estadual Abelardo Duarte Passos');
+        console.log('📊 Sistema carregado com sucesso!');
+    </script>
+</body>
+</html>
